@@ -115,7 +115,7 @@ class TransactionTest {
 	void requiresLockedAccountsAndReturnsImmutableDecisions() {
 		assertThatIllegalArgumentException().isThrownBy(() -> pending(TransactionType.CREDIT, 1).calculateOutcome(Map.of()));
 		var decision = pending(TransactionType.CREDIT, 1).calculateOutcome(accounts);
-		assertThatThrownBy(() -> decision.resultingBalances().put("B", 0L)).isInstanceOf(UnsupportedTransactionException.class);
+		assertThatThrownBy(() -> decision.resultingBalances().put("B", 0L)).isInstanceOf(UnsupportedOperationException.class);
 	}
 
 	private Transaction pending(TransactionType type, long amount) {
