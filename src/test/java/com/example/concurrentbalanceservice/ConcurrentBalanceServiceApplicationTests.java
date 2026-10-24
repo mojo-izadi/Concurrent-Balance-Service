@@ -3,10 +3,10 @@ package com.example.concurrentbalanceservice;
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
 
-import com.example.concurrentbalanceservice.application.port.JobExecutor;
-import com.example.concurrentbalanceservice.application.service.OperationRecoveryService;
-import com.example.concurrentbalanceservice.application.service.TransactionInitializer;
-import com.example.concurrentbalanceservice.domain.OperationStatus;
+import com.example.concurrentbalanceservice.domain.TransactionStatus;
+import com.example.concurrentbalanceservice.execution.JobExecutor;
+import com.example.concurrentbalanceservice.service.TransactionRecoveryServiceImpl;
+import com.example.concurrentbalanceservice.service.TransactionInitializerImpl;
 import com.example.concurrentbalanceservice.support.PostgreSQLIntegrationSupport;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -34,15 +34,15 @@ class ConcurrentBalanceServiceApplicationTests extends PostgreSQLIntegrationSupp
 		String a = newAccount(1_000);
 		String b = newAccount(500);
 		String credit = newId();
-		assertThat(post("/api/accounts/" + a + "/credit", operation(credit, 500)).statusCode()).isEqualTo(202);
-		assertFinished(credit);
+		assertThat(post("/api/accounts/" + a + "/credit", transaction(credit, 500)).statusCode()).isEqualTo(202);
+		assertFinalized(credit);
 		assertThat(repository.getBalance(a)).isEqualTo(1_500);
 		String debit = newId();
-		assertThat(post("/api/accounts/" + a + "/debit", operation(debit, 700)).statusCode()).isEqualTo(202);
-		assertFinished(debit);
+		assertThat(post("/api/accounts/" + a + "/debit", transaction(debit, 700)).statusCode()).isEqualTo(202);
+		assertFinalized(debit);
 		String transfer = newId();
 		assertThat(post("/api/transfers", transfer(transfer, a, b, 300)).statusCode()).isEqualTo(202);
-		assertFinished(transfer);
+		assertFinalized(transfer);
 		var response = get("/api/accounts/" + a + "/balance");
 		assertThat(response.statusCode()).isEqualTo(200);
 		assertThat(json.readTree(response.body()).path("balance").asLong()).isEqualTo(500);
@@ -55,24 +55,24 @@ class ConcurrentBalanceServiceApplicationTests extends PostgreSQLIntegrationSupp
 		String account = newAccount(1_000);
 		String id = newId();
 		String path = "/api/accounts/" + account + "/credit";
-		assertThat(post(path, operation(id, 100)).statusCode()).isEqualTo(202);
-		assertFinished(id);
-		assertThat(post(path, operation(id, 100)).statusCode()).isEqualTo(409);
-		assertThat(post(path, operation(id, 500)).statusCode()).isEqualTo(409);
+		assertThat(post(path, transaction(id, 100)).statusCode()).isEqualTo(202);
+		assertFinalized(id);
+		assertThat(post(path, transaction(id, 100)).statusCode()).isEqualTo(409);
+		assertThat(post(path, transaction(id, 500)).statusCode()).isEqualTo(409);
 		assertThat(repository.getBalance(account)).isEqualTo(1_100);
 	}
 
 	@ParameterizedTest
 	@ValueSource(longs = {0, -1})
-	void invalidAmountsAreRejectedForEveryOperationWithoutCreatingWork(long amount) throws Exception {
+	void invalidAmountsAreRejectedForEveryTransactionWithoutCreatingWork(long amount) throws Exception {
 		String a = newAccount(1_000);
 		String b = newAccount(500);
 		for (String type : List.of("credit", "debit", "transfer")) {
 			String id = newId();
 			String path = type.equals("transfer") ? "/api/transfers" : "/api/accounts/" + a + "/" + type;
-			String body = type.equals("transfer") ? transfer(id, a, b, amount) : operation(id, amount);
+			String body = type.equals("transfer") ? transfer(id, a, b, amount) : transaction(id, amount);
 			assertThat(post(path, body).statusCode()).isEqualTo(400);
-			assertThat(operationCount(id)).isZero();
+			assertThat(transactionCount(id)).isZero();
 		}
 		assertThat(repository.getBalance(a)).isEqualTo(1_000);
 		assertThat(repository.getBalance(b)).isEqualTo(500);
@@ -85,14 +85,14 @@ class ConcurrentBalanceServiceApplicationTests extends PostgreSQLIntegrationSupp
 		assertThat(get("/api/accounts/" + missing + "/balance").statusCode()).isEqualTo(404);
 		for (String type : List.of("credit", "debit")) {
 			String id = newId();
-			assertThat(post("/api/accounts/" + missing + "/" + type, operation(id, 100)).statusCode()).isEqualTo(404);
-			assertThat(operationCount(id)).isZero();
+			assertThat(post("/api/accounts/" + missing + "/" + type, transaction(id, 100)).statusCode()).isEqualTo(404);
+			assertThat(transactionCount(id)).isZero();
 		}
 		for (String[] accounts : List.of(new String[]{a, missing}, new String[]{missing, a}, new String[]{a, a})) {
 			String id = newId();
 			assertThat(post("/api/transfers", transfer(id, accounts[0], accounts[1], 100)).statusCode())
 					.isEqualTo(accounts[0].equals(accounts[1]) ? 400 : 404);
-			assertThat(operationCount(id)).isZero();
+			assertThat(transactionCount(id)).isZero();
 		}
 	}
 
@@ -103,7 +103,7 @@ class ConcurrentBalanceServiceApplicationTests extends PostgreSQLIntegrationSupp
 		String id = newId();
 		assertThat(post("/api/transfers", transfer(id, a, b, 1_001)).statusCode()).isEqualTo(202);
 		await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
-				assertThat(storedTransaction(id).status()).isEqualTo(OperationStatus.FAILED));
+				assertThat(storedTransaction(id).status()).isEqualTo(TransactionStatus.FAILED));
 		assertThat(storedTransaction(id).failureReason()).isEqualTo("INSUFFICIENT_BALANCE");
 		assertThat(repository.getBalance(a)).isEqualTo(1_000);
 		assertThat(repository.getBalance(b)).isEqualTo(500);
@@ -113,24 +113,24 @@ class ConcurrentBalanceServiceApplicationTests extends PostgreSQLIntegrationSupp
 	void recoveryCompletesCommittedWorkAfterInitialDispatchFailure() {
 		String account = newAccount(1_000);
 		String id = newId();
-		var rejected = new TransactionInitializer(repository, ignored -> { throw new RejectedExecutionException(); }, Clock.systemUTC());
+		var rejected = new TransactionInitializerImpl(repository, ignored -> { throw new RejectedExecutionException(); }, Clock.systemUTC());
 		rejected.credit(account, 100, id);
-		assertThat(storedTransaction(id).status()).isEqualTo(OperationStatus.PENDING);
+		assertThat(storedTransaction(id).status()).isEqualTo(TransactionStatus.PENDING);
 		assertThat(repository.getBalance(account)).isEqualTo(1_000);
-		var recovery = new OperationRecoveryService(repository, executor, Duration.ZERO);
-		recovery.recoverPendingOperations();
-		assertFinished(id);
-		recovery.recoverPendingOperations();
+		var recovery = new TransactionRecoveryServiceImpl(repository, executor, Duration.ZERO);
+		recovery.recoverPendingTransactions();
+		assertFinalized(id);
+		recovery.recoverPendingTransactions();
 		assertThat(repository.getBalance(account)).isEqualTo(1_100);
-		assertThat(operationCount(id)).isEqualTo(1);
+		assertThat(transactionCount(id)).isEqualTo(1);
 	}
 
-	private void assertFinished(String id) {
+	private void assertFinalized(String id) {
 		await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
-				assertThat(storedTransaction(id).status()).isEqualTo(OperationStatus.FINISHED));
+				assertThat(storedTransaction(id).status()).isEqualTo(TransactionStatus.FINALIZED));
 	}
 
-	private String operation(String id, long amount) {
+	private String transaction(String id, long amount) {
 		return "{\"transactionId\":\"" + id + "\",\"amount\":" + amount + "}";
 	}
 

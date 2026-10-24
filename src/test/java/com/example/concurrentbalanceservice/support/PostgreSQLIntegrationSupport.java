@@ -2,12 +2,12 @@ package com.example.concurrentbalanceservice.support;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.example.concurrentbalanceservice.adapters.persistence.entity.TransactionJpaEntity;
-import com.example.concurrentbalanceservice.adapters.persistence.mapper.TransactionMapper;
-import com.example.concurrentbalanceservice.application.port.BalanceRepository;
-import com.example.concurrentbalanceservice.application.port.TransactionBoundary;
-import com.example.concurrentbalanceservice.application.service.OperationExecutionService;
 import com.example.concurrentbalanceservice.domain.Transaction;
+import com.example.concurrentbalanceservice.repository.BalanceRepository;
+import com.example.concurrentbalanceservice.repository.entity.TransactionJpaEntity;
+import com.example.concurrentbalanceservice.repository.mapper.TransactionMapper;
+import com.example.concurrentbalanceservice.service.TransactionFinalizationService;
+import com.example.concurrentbalanceservice.service.DatabaseTransactionBoundary;
 import jakarta.persistence.EntityManager;
 import java.util.ArrayList;
 import java.util.UUID;
@@ -40,24 +40,24 @@ public abstract class PostgreSQLIntegrationSupport {
 	}
 
 	@Autowired protected BalanceRepository repository;
-	@Autowired protected TransactionBoundary boundary;
-	@Autowired protected OperationExecutionService executionService;
+	@Autowired protected DatabaseTransactionBoundary boundary;
+	@Autowired protected TransactionFinalizationService finalizationService;
 	@Autowired protected EntityManager entityManager;
 
 	protected String newAccount(long balance) {
 		String id = newId();
-		boundary.inNewTransaction(() -> entityManager.createNativeQuery("INSERT INTO accounts (account_id, balance) VALUES (:id, :balance)")
+		boundary.inNewDatabaseTransaction(() -> entityManager.createNativeQuery("INSERT INTO accounts (account_id, balance) VALUES (:id, :balance)")
 				.setParameter("id", id).setParameter("balance", balance).executeUpdate());
 		return id;
 	}
 
 	protected Transaction storedTransaction(String id) {
-		return boundary.inNewTransaction(() -> new TransactionMapper().toDomain(entityManager.find(TransactionJpaEntity.class, id)));
+		return boundary.inNewDatabaseTransaction(() -> new TransactionMapper().toDomain(entityManager.find(TransactionJpaEntity.class, id)));
 	}
 
-	protected long operationCount(String id) {
-		return boundary.inNewTransaction(() -> ((Number) entityManager.createNativeQuery(
-				"SELECT COUNT(*) FROM balance_operations WHERE transaction_id = :id").setParameter("id", id).getSingleResult()).longValue());
+	protected long transactionCount(String id) {
+		return boundary.inNewDatabaseTransaction(() -> ((Number) entityManager.createNativeQuery(
+				"SELECT COUNT(*) FROM transactions WHERE transaction_id = :id").setParameter("id", id).getSingleResult()).longValue());
 	}
 
 	protected static String newId() {

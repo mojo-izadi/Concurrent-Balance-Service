@@ -14,23 +14,24 @@ class ArchitectureTest {
 			.should().onlyDependOnClassesThat().resideInAnyPackage("java..", "..domain..");
 
 	@ArchTest
-	static final ArchRule applicationDependsOnlyOnCoreAndJava = classes().that().resideInAPackage("..application..")
-			.should().onlyDependOnClassesThat().resideInAnyPackage("java..", "..application..", "..domain..");
+	static final ArchRule servicesAvoidWebAndPersistenceDetails = noClasses().that().resideInAPackage("..service..")
+			.should().dependOnClassesThat().resideInAnyPackage("..controller..", "..dto..", "..config..",
+					"..repository.entity..", "..repository.mapper..");
 
 	@ArchTest
-	static final ArchRule persistenceDoesNotDependOnInboundAdapters = noClasses().that().resideInAPackage("..adapters.persistence..")
-			.should().dependOnClassesThat().resideInAnyPackage("..adapters.controller..", "..adapters.http..", "..infrastructure..", "..application.service..");
+	static final ArchRule repositoriesAvoidWebAndServiceImplementations = noClasses().that().resideInAPackage("..repository..")
+			.should().dependOnClassesThat().resideInAnyPackage("..controller..", "..dto..", "..config..", "..service");
 
 	@ArchTest
-	static final ArchRule controllersUseApplicationServices = noClasses().that().resideInAPackage("..adapters.controller..")
-			.should().dependOnClassesThat().resideInAnyPackage("..application.port..", "..adapters.persistence..", "..infrastructure..", "..domain..");
+	static final ArchRule controllersUseServices = noClasses().that().resideInAPackage("..controller..")
+			.should().dependOnClassesThat().resideInAnyPackage("..repository..", "..execution..", "..config..", "..domain..");
 
 	@ArchTest
-	static final ArchRule persistenceTypesStayInsidePersistence = noClasses().that()
-			.resideOutsideOfPackage("..adapters.persistence..")
-			.should().dependOnClassesThat().resideInAPackage("..adapters.persistence..");
+	static final ArchRule persistenceDetailsStayInsideRepositories = noClasses().that()
+			.resideOutsideOfPackage("..repository..")
+			.should().dependOnClassesThat().resideInAnyPackage("..repository.entity..", "..repository.mapper..");
 
 	@ArchTest
-	static final ArchRule adaptersDoNotUseJdbc = noClasses().that().resideInAPackage("..adapters..")
+	static final ArchRule repositoriesDoNotUseJdbc = noClasses().that().resideInAPackage("..repository..")
 			.should().dependOnClassesThat().resideInAnyPackage("org.springframework.jdbc..", "java.sql..");
 }

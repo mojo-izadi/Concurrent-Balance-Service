@@ -19,107 +19,107 @@ class TransactionTest {
 
 	@Test
 	void creditsTheDestination() {
-		assertThat(pending(OperationType.CREDIT, 500).apply(accounts))
-				.isEqualTo(ExecutionDecision.finished(Map.of("B", 1_000L)));
+		assertThat(pending(TransactionType.CREDIT, 500).calculateOutcome(accounts))
+				.isEqualTo(TransactionFinalizationDecision.finalized(Map.of("B", 1_000L)));
 	}
 
 	@Test
 	void debitsTheSourceAndAllowsAnExactBalanceDebit() {
-		assertThat(pending(OperationType.DEBIT, 700).apply(accounts).resultingBalances()).containsExactlyEntriesOf(Map.of("A", 300L));
-		assertThat(pending(OperationType.DEBIT, 1_000).apply(accounts).resultingBalances()).containsEntry("A", 0L);
+		assertThat(pending(TransactionType.DEBIT, 700).calculateOutcome(accounts).resultingBalances()).containsExactlyEntriesOf(Map.of("A", 300L));
+		assertThat(pending(TransactionType.DEBIT, 1_000).calculateOutcome(accounts).resultingBalances()).containsEntry("A", 0L);
 	}
 
 	@Test
 	void transfersEqualAmountsWithoutMutatingInput() {
-		assertThat(pending(OperationType.TRANSFER, 300).apply(accounts))
-				.isEqualTo(ExecutionDecision.finished(Map.of("A", 700L, "B", 800L)));
+		assertThat(pending(TransactionType.TRANSFER, 300).calculateOutcome(accounts))
+				.isEqualTo(TransactionFinalizationDecision.finalized(Map.of("A", 700L, "B", 800L)));
 		assertThat(accounts.get("A").balance()).isEqualTo(1_000);
 		assertThat(accounts.get("B").balance()).isEqualTo(500);
 	}
 
 	@ParameterizedTest
-	@EnumSource(value = OperationType.class, names = {"DEBIT", "TRANSFER"})
-	void insufficientFundsProduceNoBalanceChanges(OperationType type) {
-		assertThat(pending(type, 1_001).apply(accounts)).isEqualTo(ExecutionDecision.insufficientBalance());
+	@EnumSource(value = TransactionType.class, names = {"DEBIT", "TRANSFER"})
+	void insufficientFundsProduceNoBalanceChanges(TransactionType type) {
+		assertThat(pending(type, 1_001).calculateOutcome(accounts)).isEqualTo(TransactionFinalizationDecision.insufficientBalance());
 	}
 
 	@ParameterizedTest
-	@EnumSource(value = OperationType.class, names = {"CREDIT", "TRANSFER"})
-	void overflowFailsBeforeReturningAnyBalanceChanges(OperationType type) {
+	@EnumSource(value = TransactionType.class, names = {"CREDIT", "TRANSFER"})
+	void overflowFailsBeforeReturningAnyBalanceChanges(TransactionType type) {
 		var overflowing = Map.of("A", new Account("A", 100), "B", new Account("B", Long.MAX_VALUE));
-		assertThatThrownBy(() -> pending(type, 1).apply(overflowing)).isInstanceOf(ArithmeticException.class);
+		assertThatThrownBy(() -> pending(type, 1).calculateOutcome(overflowing)).isInstanceOf(ArithmeticException.class);
 	}
 
 	@Test
 	void acceptsTheLargestRepresentableBalance() {
-		assertThat(pending(OperationType.CREDIT, Long.MAX_VALUE).apply(Map.of("B", new Account("B", 0)))
+		assertThat(pending(TransactionType.CREDIT, Long.MAX_VALUE).calculateOutcome(Map.of("B", new Account("B", 0)))
 				.resultingBalances()).containsEntry("B", Long.MAX_VALUE);
 	}
 
 	@ParameterizedTest
 	@ValueSource(longs = {0, -1, Long.MIN_VALUE})
 	void rejectsNonpositiveAmounts(long amount) {
-		assertThatIllegalArgumentException().isThrownBy(() -> pending(OperationType.CREDIT, amount));
+		assertThatIllegalArgumentException().isThrownBy(() -> pending(TransactionType.CREDIT, amount));
 	}
 
 	@ParameterizedTest
 	@NullAndEmptySource
 	@ValueSource(strings = {" ", "\t"})
 	void rejectsMissingTransactionIds(String id) {
-		assertThatIllegalArgumentException().isThrownBy(() -> Transaction.pending(id, OperationType.CREDIT, 1, null, "B", NOW));
+		assertThatIllegalArgumentException().isThrownBy(() -> Transaction.pending(id, TransactionType.CREDIT, 1, null, "B", NOW));
 	}
 
 	@ParameterizedTest
 	@MethodSource("invalidReferences")
-	void rejectsInvalidAccountReferences(OperationType type, String source, String destination) {
+	void rejectsInvalidAccountReferences(TransactionType type, String source, String destination) {
 		assertThatIllegalArgumentException().isThrownBy(() -> Transaction.pending("tx", type, 1, source, destination, NOW));
 	}
 
 	static Stream<Arguments> invalidReferences() {
 		return Stream.of(
-				Arguments.of(OperationType.CREDIT, "A", "B"),
-				Arguments.of(OperationType.CREDIT, null, null),
-				Arguments.of(OperationType.CREDIT, null, " "),
-				Arguments.of(OperationType.DEBIT, "A", "B"),
-				Arguments.of(OperationType.DEBIT, null, null),
-				Arguments.of(OperationType.DEBIT, " ", null),
-				Arguments.of(OperationType.TRANSFER, "A", "A"),
-				Arguments.of(OperationType.TRANSFER, null, "B"),
-				Arguments.of(OperationType.TRANSFER, "A", ""),
-				Arguments.of(OperationType.TRANSFER, "A".repeat(129), "B"),
-				Arguments.of(OperationType.CREDIT, null, "B".repeat(129)));
+				Arguments.of(TransactionType.CREDIT, "A", "B"),
+				Arguments.of(TransactionType.CREDIT, null, null),
+				Arguments.of(TransactionType.CREDIT, null, " "),
+				Arguments.of(TransactionType.DEBIT, "A", "B"),
+				Arguments.of(TransactionType.DEBIT, null, null),
+				Arguments.of(TransactionType.DEBIT, " ", null),
+				Arguments.of(TransactionType.TRANSFER, "A", "A"),
+				Arguments.of(TransactionType.TRANSFER, null, "B"),
+				Arguments.of(TransactionType.TRANSFER, "A", ""),
+				Arguments.of(TransactionType.TRANSFER, "A".repeat(129), "B"),
+				Arguments.of(TransactionType.CREDIT, null, "B".repeat(129)));
 	}
 
 	@Test
 	void enforcesIdentifierLimitsAndRequiredMetadata() {
-		assertThatIllegalArgumentException().isThrownBy(() -> Transaction.pending("x".repeat(129), OperationType.CREDIT, 1, null, "B", NOW));
-		assertThat(Transaction.pending("x".repeat(128), OperationType.CREDIT, 1, null, "B".repeat(128), NOW)).isNotNull();
+		assertThatIllegalArgumentException().isThrownBy(() -> Transaction.pending("x".repeat(129), TransactionType.CREDIT, 1, null, "B", NOW));
+		assertThat(Transaction.pending("x".repeat(128), TransactionType.CREDIT, 1, null, "B".repeat(128), NOW)).isNotNull();
 		assertThatIllegalArgumentException().isThrownBy(() -> Transaction.pending("tx", null, 1, null, "B", NOW));
-		assertThatIllegalArgumentException().isThrownBy(() -> Transaction.pending("tx", OperationType.CREDIT, 1, null, "B", null));
-		assertThatIllegalArgumentException().isThrownBy(() -> pending(OperationType.CREDIT, 1).withStatus(null, null, NOW));
+		assertThatIllegalArgumentException().isThrownBy(() -> Transaction.pending("tx", TransactionType.CREDIT, 1, null, "B", null));
+		assertThatIllegalArgumentException().isThrownBy(() -> pending(TransactionType.CREDIT, 1).withStatus(null, null, NOW));
 	}
 
 	@Test
 	void enforcesFailureReasonAndTerminalStateRules() {
-		var transaction = pending(OperationType.CREDIT, 1);
-		assertThatIllegalArgumentException().isThrownBy(() -> transaction.withStatus(OperationStatus.FAILED, null, NOW));
-		assertThatIllegalArgumentException().isThrownBy(() -> transaction.withStatus(OperationStatus.FAILED, " ", NOW));
-		assertThatIllegalArgumentException().isThrownBy(() -> transaction.withStatus(OperationStatus.FINISHED, "failure", NOW));
-		for (var status : new OperationStatus[]{OperationStatus.FINISHED, OperationStatus.FAILED}) {
-			var terminal = transaction.withStatus(status, status == OperationStatus.FAILED ? "failure" : null, NOW);
-			assertThatIllegalStateException().isThrownBy(() -> terminal.apply(accounts));
+		var transaction = pending(TransactionType.CREDIT, 1);
+		assertThatIllegalArgumentException().isThrownBy(() -> transaction.withStatus(TransactionStatus.FAILED, null, NOW));
+		assertThatIllegalArgumentException().isThrownBy(() -> transaction.withStatus(TransactionStatus.FAILED, " ", NOW));
+		assertThatIllegalArgumentException().isThrownBy(() -> transaction.withStatus(TransactionStatus.FINALIZED, "failure", NOW));
+		for (var status : new TransactionStatus[]{TransactionStatus.FINALIZED, TransactionStatus.FAILED}) {
+			var terminal = transaction.withStatus(status, status == TransactionStatus.FAILED ? "failure" : null, NOW);
+			assertThatIllegalStateException().isThrownBy(() -> terminal.calculateOutcome(accounts));
 		}
 	}
 
 	@Test
 	void requiresLockedAccountsAndReturnsImmutableDecisions() {
-		assertThatIllegalArgumentException().isThrownBy(() -> pending(OperationType.CREDIT, 1).apply(Map.of()));
-		var decision = pending(OperationType.CREDIT, 1).apply(accounts);
-		assertThatThrownBy(() -> decision.resultingBalances().put("B", 0L)).isInstanceOf(UnsupportedOperationException.class);
+		assertThatIllegalArgumentException().isThrownBy(() -> pending(TransactionType.CREDIT, 1).calculateOutcome(Map.of()));
+		var decision = pending(TransactionType.CREDIT, 1).calculateOutcome(accounts);
+		assertThatThrownBy(() -> decision.resultingBalances().put("B", 0L)).isInstanceOf(UnsupportedTransactionException.class);
 	}
 
-	private Transaction pending(OperationType type, long amount) {
-		return Transaction.pending("tx", type, amount, type == OperationType.CREDIT ? null : "A",
-				type == OperationType.DEBIT ? null : "B", NOW);
+	private Transaction pending(TransactionType type, long amount) {
+		return Transaction.pending("tx", type, amount, type == TransactionType.CREDIT ? null : "A",
+				type == TransactionType.DEBIT ? null : "B", NOW);
 	}
 }

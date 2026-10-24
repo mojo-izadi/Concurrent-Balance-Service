@@ -6,9 +6,9 @@ import java.util.Map;
 
 public record Transaction(
 		String transactionId,
-		OperationType type,
+		TransactionType type,
 		long amount,
-		OperationStatus status,
+		TransactionStatus status,
 		String sourceAccountId,
 		String destinationAccountId,
 		String failureReason,
@@ -22,34 +22,34 @@ public record Transaction(
 			throw new IllegalArgumentException("Transaction ID cannot exceed 128 characters");
 		}
 		if (type == null || status == null || updatedAt == null) {
-			throw new IllegalArgumentException("Operation type, status, and update time are required");
+			throw new IllegalArgumentException("Transaction type, status, and update time are required");
 		}
 		if (amount <= 0) {
 			throw new IllegalArgumentException("Amount must be greater than zero");
 		}
 		validateAccountReferences(type, sourceAccountId, destinationAccountId);
-		if (status == OperationStatus.FAILED && (failureReason == null || failureReason.isBlank())) {
-			throw new IllegalArgumentException("A failed operation must have a failure reason");
+		if (status == TransactionStatus.FAILED && (failureReason == null || failureReason.isBlank())) {
+			throw new IllegalArgumentException("A failed transaction must have a failure reason");
 		}
-		if (status != OperationStatus.FAILED && failureReason != null) {
-			throw new IllegalArgumentException("Only failed operations have a failure reason");
+		if (status != TransactionStatus.FAILED && failureReason != null) {
+			throw new IllegalArgumentException("Only failed transactions have a failure reason");
 		}
 	}
 
-	public static Transaction pending(String transactionId, OperationType type, long amount,
+	public static Transaction pending(String transactionId, TransactionType type, long amount,
 			String sourceAccountId, String destinationAccountId, Instant now) {
-		return new Transaction(transactionId, type, amount, OperationStatus.PENDING,
+		return new Transaction(transactionId, type, amount, TransactionStatus.PENDING,
 				sourceAccountId, destinationAccountId, null, now);
 	}
 
-	public Transaction withStatus(OperationStatus newStatus, String newFailureReason, Instant now) {
+	public Transaction withStatus(TransactionStatus newStatus, String newFailureReason, Instant now) {
 		return new Transaction(transactionId, type, amount, newStatus,
 				sourceAccountId, destinationAccountId, newFailureReason, now);
 	}
 
-	public ExecutionDecision apply(Map<String, Account> lockedAccounts) {
-		if (status != OperationStatus.PENDING) {
-			throw new IllegalStateException("Only pending operations can be applied");
+	public TransactionFinalizationDecision calculateOutcome(Map<String, Account> lockedAccounts) {
+		if (status != TransactionStatus.PENDING) {
+			throw new IllegalStateException("Only pending transactions can be finalized");
 		}
 		Map<String, Long> balances = new LinkedHashMap<>();
 		switch (type) {
@@ -58,21 +58,21 @@ public record Transaction(
 			case DEBIT -> {
 				long sourceBalance = requiredAccount(lockedAccounts, sourceAccountId).balance();
 				if (sourceBalance < amount) {
-					return ExecutionDecision.insufficientBalance();
+					return TransactionFinalizationDecision.insufficientBalance();
 				}
 				balances.put(sourceAccountId, sourceBalance - amount);
 			}
 			case TRANSFER -> {
 				long sourceBalance = requiredAccount(lockedAccounts, sourceAccountId).balance();
 				if (sourceBalance < amount) {
-					return ExecutionDecision.insufficientBalance();
+					return TransactionFinalizationDecision.insufficientBalance();
 				}
 				long destinationBalance = requiredAccount(lockedAccounts, destinationAccountId).balance();
 				balances.put(sourceAccountId, sourceBalance - amount);
 				balances.put(destinationAccountId, Math.addExact(destinationBalance, amount));
 			}
 		}
-		return ExecutionDecision.finished(balances);
+		return TransactionFinalizationDecision.finalized(balances);
 	}
 
 	private static Account requiredAccount(Map<String, Account> accounts, String accountId) {
@@ -83,7 +83,7 @@ public record Transaction(
 		return account;
 	}
 
-	private static void validateAccountReferences(OperationType type, String source, String destination) {
+	private static void validateAccountReferences(TransactionType type, String source, String destination) {
 		if ((source != null && source.length() > 128) || (destination != null && destination.length() > 128)) {
 			throw new IllegalArgumentException("Account IDs cannot exceed 128 characters");
 		}
