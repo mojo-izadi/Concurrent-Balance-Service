@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface TransactionJpaRepository extends Repository<TransactionJpaEntity, String> {
 	Optional<TransactionJpaEntity> findById(String transactionId);
+	boolean existsById(String transactionId);
 
 	@Modifying
 	@Query(value = """
@@ -23,6 +24,7 @@ public interface TransactionJpaRepository extends Repository<TransactionJpaEntit
 			@Param("amount") long amount, @Param("sourceAccountId") String sourceAccountId,
 			@Param("destinationAccountId") String destinationAccountId, @Param("updatedAt") Instant updatedAt);
 
+	// Read the current database status after account locks; findById may return a cached entity.
 	@Query(value = "SELECT status FROM transactions WHERE transaction_id = :transactionId", nativeQuery = true)
 	Optional<String> findStatus(@Param("transactionId") String transactionId);
 

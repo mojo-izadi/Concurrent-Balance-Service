@@ -8,7 +8,11 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
+@Component
 public class VirtualThreadJobExecutor implements JobExecutor {
 	private static final Logger LOGGER = Logger.getLogger(VirtualThreadJobExecutor.class.getName());
 	private final ExecutorService executor;
@@ -16,8 +20,9 @@ public class VirtualThreadJobExecutor implements JobExecutor {
 	private final Semaphore finalizationSlots;
 	private final Set<String> inFlight = ConcurrentHashMap.newKeySet();
 
-	public VirtualThreadJobExecutor(ExecutorService executor, TransactionFinalizationService finalizationService,
-			int maxConcurrentTransactions) {
+	public VirtualThreadJobExecutor(@Qualifier("balanceVirtualThreadExecutor") ExecutorService executor,
+			TransactionFinalizationService finalizationService,
+			@Value("${balance.finalization.max-concurrent-transactions:10}") int maxConcurrentTransactions) {
 		if (maxConcurrentTransactions <= 0) {
 			throw new IllegalArgumentException("Maximum concurrent transactions must be greater than zero");
 		}

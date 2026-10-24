@@ -13,7 +13,10 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
+@Component
 public class TransactionFinalizationServiceImpl implements TransactionFinalizationService {
 	private static final Logger LOGGER = Logger.getLogger(TransactionFinalizationServiceImpl.class.getName());
 
@@ -24,7 +27,9 @@ public class TransactionFinalizationServiceImpl implements TransactionFinalizati
 	private final Duration retryDelay;
 
 	public TransactionFinalizationServiceImpl(BalanceRepository balanceRepository,
-			DatabaseTransactionBoundary databaseTransactionBoundary, Clock clock, int maxRetries, Duration retryDelay) {
+			DatabaseTransactionBoundary databaseTransactionBoundary, Clock clock,
+			@Value("${balance.finalization.max-retries:3}") int maxRetries,
+			@Value("${balance.finalization.retry-delay:100ms}") Duration retryDelay) {
 		if (maxRetries < 0 || retryDelay.isNegative()) {
 			throw new IllegalArgumentException("Retry count and delay must be nonnegative");
 		}

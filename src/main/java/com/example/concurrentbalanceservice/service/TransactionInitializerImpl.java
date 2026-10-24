@@ -9,7 +9,9 @@ import com.example.concurrentbalanceservice.service.exception.InvalidRequestExce
 import java.time.Clock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.springframework.stereotype.Component;
 
+@Component
 public class TransactionInitializerImpl implements TransactionInitializer {
 	private static final Logger LOGGER = Logger.getLogger(TransactionInitializerImpl.class.getName());
 

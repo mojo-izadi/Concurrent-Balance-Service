@@ -2,7 +2,9 @@ package com.example.concurrentbalanceservice.service;
 
 import com.example.concurrentbalanceservice.repository.BalanceRepository;
 import com.example.concurrentbalanceservice.service.exception.InvalidRequestException;
+import org.springframework.stereotype.Component;
 
+@Component
 public class BalanceServiceImpl implements BalanceService {
 	private final TransactionInitializer transactionInitializer;
 	private final BalanceRepository balanceRepository;

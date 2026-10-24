@@ -3,6 +3,7 @@ package com.example.concurrentbalanceservice.repository;
 import com.example.concurrentbalanceservice.domain.Account;
 import com.example.concurrentbalanceservice.domain.TransactionStatus;
 import com.example.concurrentbalanceservice.domain.Transaction;
+import com.example.concurrentbalanceservice.repository.entity.AccountJpaEntity;
 import com.example.concurrentbalanceservice.repository.mapper.TransactionMapper;
 import com.example.concurrentbalanceservice.service.exception.AccountNotFoundException;
 import com.example.concurrentbalanceservice.service.exception.DuplicateTransactionIdException;
@@ -39,7 +40,8 @@ public class JpaBalanceRepository implements BalanceRepository {
 
 	@Override
 	public long getBalance(String accountId) {
-		return accountRepository.findBalance(accountId)
+		return accountRepository.findById(accountId)
+				.map(AccountJpaEntity::getBalance)
 				.orElseThrow(() -> new AccountNotFoundException(accountId));
 	}
 
@@ -90,7 +92,7 @@ public class JpaBalanceRepository implements BalanceRepository {
 	@Transactional(propagation = Propagation.MANDATORY)
 	public void updateOutcome(String transactionId, TransactionStatus status, String failureReason, Instant updatedAt) {
 		if (transactionRepository.updateOutcome(transactionId, status.name(), failureReason, updatedAt) != 1) {
-			if (transactionRepository.findStatus(transactionId).isEmpty()) {
+			if (!transactionRepository.existsById(transactionId)) {
 				throw new TransactionNotFoundException(transactionId);
 			}
 			throw new TransactionAlreadyFinalizedException(transactionId);
