@@ -36,7 +36,7 @@ class BalanceControllerTest {
 
 	@Test
 	void acceptsTransfers() throws Exception {
-		mvc.perform(post("/api/transfers").contentType(MediaType.APPLICATION_JSON).content("""
+		mvc.perform(post("/api/transfer").contentType(MediaType.APPLICATION_JSON).content("""
 				{"transactionId":"tx","sourceAccountId":"A","destinationAccountId":"B","amount":300}
 				"""))
 				.andExpect(status().isAccepted()).andExpect(jsonPath("$.transactionId").value("tx"));
@@ -61,7 +61,7 @@ class BalanceControllerTest {
 
 	@Test
 	void transferRequiresAnAmount() throws Exception {
-		mvc.perform(post("/api/transfers").contentType(MediaType.APPLICATION_JSON).content("""
+		mvc.perform(post("/api/transfer").contentType(MediaType.APPLICATION_JSON).content("""
 				{"transactionId":"tx","sourceAccountId":"A","destinationAccountId":"B"}
 				"""))
 				.andExpect(status().isBadRequest());

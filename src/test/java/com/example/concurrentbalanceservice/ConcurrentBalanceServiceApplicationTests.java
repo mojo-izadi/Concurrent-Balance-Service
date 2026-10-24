@@ -41,7 +41,7 @@ class ConcurrentBalanceServiceApplicationTests extends PostgreSQLIntegrationSupp
 		assertThat(post("/api/accounts/" + a + "/debit", transaction(debit, 700)).statusCode()).isEqualTo(202);
 		assertFinalized(debit);
 		String transfer = newId();
-		assertThat(post("/api/transfers", transfer(transfer, a, b, 300)).statusCode()).isEqualTo(202);
+		assertThat(post("/api/transfer", transfer(transfer, a, b, 300)).statusCode()).isEqualTo(202);
 		assertFinalized(transfer);
 		var response = get("/api/accounts/" + a + "/balance");
 		assertThat(response.statusCode()).isEqualTo(200);
@@ -69,7 +69,7 @@ class ConcurrentBalanceServiceApplicationTests extends PostgreSQLIntegrationSupp
 		String b = newAccount(500);
 		for (String type : List.of("credit", "debit", "transfer")) {
 			String id = newId();
-			String path = type.equals("transfer") ? "/api/transfers" : "/api/accounts/" + a + "/" + type;
+			String path = type.equals("transfer") ? "/api/transfer" : "/api/accounts/" + a + "/" + type;
 			String body = type.equals("transfer") ? transfer(id, a, b, amount) : transaction(id, amount);
 			assertThat(post(path, body).statusCode()).isEqualTo(400);
 			assertThat(transactionCount(id)).isZero();
@@ -90,7 +90,7 @@ class ConcurrentBalanceServiceApplicationTests extends PostgreSQLIntegrationSupp
 		}
 		for (String[] accounts : List.of(new String[]{a, missing}, new String[]{missing, a}, new String[]{a, a})) {
 			String id = newId();
-			assertThat(post("/api/transfers", transfer(id, accounts[0], accounts[1], 100)).statusCode())
+			assertThat(post("/api/transfer", transfer(id, accounts[0], accounts[1], 100)).statusCode())
 					.isEqualTo(accounts[0].equals(accounts[1]) ? 400 : 404);
 			assertThat(transactionCount(id)).isZero();
 		}
@@ -101,7 +101,7 @@ class ConcurrentBalanceServiceApplicationTests extends PostgreSQLIntegrationSupp
 		String a = newAccount(1_000);
 		String b = newAccount(500);
 		String id = newId();
-		assertThat(post("/api/transfers", transfer(id, a, b, 1_001)).statusCode()).isEqualTo(202);
+		assertThat(post("/api/transfer", transfer(id, a, b, 1_001)).statusCode()).isEqualTo(202);
 		await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
 				assertThat(storedTransaction(id).status()).isEqualTo(TransactionStatus.FAILED));
 		assertThat(storedTransaction(id).failureReason()).isEqualTo("INSUFFICIENT_BALANCE");

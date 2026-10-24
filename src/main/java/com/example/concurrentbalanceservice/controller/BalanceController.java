@@ -41,7 +41,7 @@ public class BalanceController {
 				request.transactionId(), "Transaction registered successfully"));
 	}
 
-	@PostMapping("/transfers")
+	@PostMapping("/transfer")
 	public ResponseEntity<TransactionAcceptedResponse> transfer(@RequestBody TransferRequest request) {
 		long amount = requireAmount(request.amount());
 		balanceService.transfer(request.sourceAccountId(), request.destinationAccountId(), amount,
